@@ -15,7 +15,12 @@ mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log('Connected to MongoDB'))
+.then(async () => {
+  console.log('Connected to MongoDB');
+  const admin = mongoose.connection.db.admin();
+  const dbInfo = await admin.listDatabases();
+  console.log('Available databases:', dbInfo.databases.map(db => db.name));
+})
 .catch(err => console.error('MongoDB connection error:', err));
 
 // Dynamic schema
@@ -38,11 +43,12 @@ app.get('/api/get-emg-data', async (req, res) => {
     const db = mongoose.connection.useDb(database);
     const Model = db.model(collection, dynamicSchema);
     
-    // Count documents
+    console.log('MongoDB Connection State:', mongoose.connection.readyState);
+    console.log('Current database:', db.name);
+    
     const count = await Model.countDocuments();
     console.log(`Found ${count} documents in the collection`);
     
-    // Find the most recent document
     const data = await Model.findOne().sort({ timestamp: -1 });
     
     if (!data) {
@@ -50,35 +56,18 @@ app.get('/api/get-emg-data', async (req, res) => {
       return res.status(404).json({ 
         success: false, 
         error: 'EMG data not found in the specified database and collection',
-        debug: { database, collection, documentCount: count }
+        debug: { database, collection, documentCount: count, connectionState: mongoose.connection.readyState }
       });
     }
     
-    // Log a subset of the data for debugging
-    console.log('Data found:', JSON.stringify({
-      _id: data._id,
-      timestamp: data.timestamp,
-      emg_signals_length: data.emg_signals ? data.emg_signals.length : 'N/A'
-    }));
-    
-    return res.json({ 
-      success: true, 
-      data: {
-        _id: data._id,
-        timestamp: data.timestamp,
-        emg_signals: data.emg_signals,
-        ed_mvc: data.ed_mvc,
-        fd_mvc: data.fd_mvc,
-        session_time: data.session_time,
-        // Include other fields as needed
-      }
-    });
+    console.log('Data found:', JSON.stringify(data));
+    return res.json({ success: true, data: data });
   } catch (error) {
     console.error(`Error in get-emg-data: ${error}`);
     return res.status(500).json({ 
       success: false, 
       error: error.message,
-      debug: { database, collection, errorDetails: error.stack }
+      debug: { database, collection, errorDetails: error.stack, connectionState: mongoose.connection.readyState }
     });
   }
 });
@@ -129,6 +118,52 @@ app.get('/api/get-count', async (req, res) => {
   } catch (error) {
     console.error(`Error in get-count: ${error}`);
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/get-specific-doc', async (req, res) => {
+  const { database, collection, id } = req.query;
+  console.log(`Attempting to query specific document in database: ${database}, collection: ${collection}, id: ${id}`);
+  
+  if (!database || !collection || !id) {
+    return res.status(400).json({ success: false, error: 'Database, collection, and id are required' });
+  }
+
+  try {
+    const db = mongoose.connection.useDb(database);
+    const Model = db.model(collection, dynamicSchema);
+    
+    const data = await Model.findById(id);
+    
+    if (!data) {
+      console.log('No data found for specific id');
+      return res.status(404).json({ success: false, error: 'Document not found' });
+    }
+    
+    console.log('Specific document found:', JSON.stringify(data));
+    return res.json({ success: true, data: data });
+  } catch (error) {
+    console.error(`Error in get-specific-doc: ${error}`);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/insert-test-data', async (req, res) => {
+  const { database, collection } = req.query;
+  try {
+    const db = mongoose.connection.useDb(database);
+    const Model = db.model(collection, dynamicSchema);
+    const testData = {
+      emg_signals: [1, 2, 3, 4, 5],
+      timestamp: new Date(),
+      ed_mvc: 2.5,
+      fd_mvc: 3.0,
+      session_time: 60
+    };
+    const result = await Model.create(testData);
+    res.json({ success: true, insertedId: result._id });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
