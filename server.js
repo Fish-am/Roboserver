@@ -84,6 +84,7 @@ app.get('/api/test-data', async (req, res) => {
     const db = mongoose.connection.useDb(database);
     const Model = db.model(collection, dynamicSchema);
     const data = await Model.find().limit(5).sort({ timestamp: -1 });
+    console.log(`Found ${data.length} documents`);
     return res.json({ 
       success: true, 
       count: data.length,
@@ -114,6 +115,7 @@ app.get('/api/get-count', async (req, res) => {
     const db = mongoose.connection.useDb(database);
     const Model = db.model(collection, dynamicSchema);
     const count = await Model.countDocuments();
+    console.log(`Document count: ${count}`);
     return res.json({ success: true, data: { count } });
   } catch (error) {
     console.error(`Error in get-count: ${error}`);
@@ -150,6 +152,12 @@ app.get('/api/get-specific-doc', async (req, res) => {
 
 app.post('/api/insert-test-data', async (req, res) => {
   const { database, collection } = req.query;
+  console.log(`Inserting test data into database: ${database}, collection: ${collection}`);
+  
+  if (!database || !collection) {
+    return res.status(400).json({ success: false, error: 'Database and collection names are required' });
+  }
+
   try {
     const db = mongoose.connection.useDb(database);
     const Model = db.model(collection, dynamicSchema);
@@ -161,8 +169,10 @@ app.post('/api/insert-test-data', async (req, res) => {
       session_time: 60
     };
     const result = await Model.create(testData);
+    console.log('Test data inserted:', result._id);
     res.json({ success: true, insertedId: result._id });
   } catch (error) {
+    console.error(`Error inserting test data: ${error}`);
     res.status(500).json({ success: false, error: error.message });
   }
 });
