@@ -68,6 +68,24 @@ app.get("/api/get-raw-data", async (req, res) => {
     }
 });
 
+app.get("/api/check-db-collection", async (req, res) => {
+    const { dbName, collectionName } = req.query;
+    try {
+        const client = await mongoose.connection.getClient();
+        const db = client.db(dbName);
+        const collections = await db.listCollections({ name: collectionName }).toArray();
+        
+        if (collections.length > 0) {
+            res.json({ exists: true });
+        } else {
+            res.json({ exists: false });
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to check database and collection' });
+    }
+});
+
 // Start server
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
