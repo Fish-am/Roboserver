@@ -3,7 +3,6 @@ const express = require("express");
 const mongoose = require("mongoose");
 const bodyParser = require("body-parser");
 const cors = require("cors");
-const createModel = require("./models/hand_data");
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -14,37 +13,62 @@ app.use(bodyParser.json());
 
 // MongoDB connection
 mongoose
-  .connect(process.env.MONGODB_URI)
-  .then(() => {
-    console.log("Connected to MongoDB");
-  })
-  .catch((err) => {
-    console.log("Error connecting to MongoDB:", err);
-  });
+    .connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => {
+        console.log("Connected to MongoDB");
+    })
+    .catch((err) => {
+        console.log("Error connecting to MongoDB:", err);
+    });
+
+// Function to get the model for a specific collection
+function getModel(dbName, collectionName) {
+    const connection = mongoose.connection.useDb(dbName);
+    return connection.model(collectionName, new mongoose.Schema({}, { strict: false }), collectionName);
+}
 
 // Routes
 app.get("/", async (req, res) => {
-  res.send("Hello from server");
+    res.send("Hello from server");
 });
 
-app.get("/api/get-data", async (req, res) => {
-  const { dbName, collectionName } = req.query;
+app.get("/api/get-count", async (req, res) => {
+    const { dbName, collectionName } = req.query;
+    try {
+        const Model = getModel(dbName, collectionName);
+        const data = await Model.findOne({ count: { $exists: true } });
+        return res.json({ success: true, data: data });
+    } catch (error) {
+        console.log(error);
+        return res.json({ success: false, error: error.message });
+    }
+});
 
-  if (!dbName || !collectionName) {
-    return res.status(400).json({ success: false, error: "Database name and collection name are required" });
-  }
+app.get("/api/get-emg-data", async (req, res) => {
+    const { dbName, collectionName } = req.query;
+    try {
+        const Model = getModel(dbName, collectionName);
+        const data = await Model.findOne().sort({ timestamp: -1 });
+        return res.json({ success: true, data: data });
+    } catch (error) {
+        console.log(error);
+        return res.json({ success: false, error: error.message });
+    }
+});
 
-  try {
-    const Model = createModel(dbName, collectionName);
-    const data = await Model.find().sort({ timestamp: -1 }).limit(100);
-    return res.json({ success: true, data: data });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({ success: false, error: error.message });
-  }
+app.get("/api/get-raw-data", async (req, res) => {
+    const { dbName, collectionName } = req.query;
+    try {
+        const Model = getModel(dbName, collectionName);
+        const data = await Model.find({ count: { $exists: false } }).sort({ timestamp: -1 });
+        return res.json({ success: true, data: data });
+    } catch (error) {
+        console.log(error);
+        return res.json({ success: false, error: error.message });
+    }
 });
 
 // Start server
 app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+    console.log(`Server running on port ${port}`);
 });
